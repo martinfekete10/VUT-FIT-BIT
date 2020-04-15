@@ -11,7 +11,7 @@
 #include <getopt.h>
 #include <string.h>
 #include <stdbool.h>
-#include <regex.h>
+#include <ctype.h>
 
 #include <netdb.h>
 #include <pcap/pcap.h>
@@ -28,6 +28,7 @@
  * Function prototypes
  */
 void print_err(char *);
+void check_int(char *);
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 void print_first_line(const u_char *, int, bool);
 void print_tcp_packet(const u_char *, int);
@@ -69,9 +70,11 @@ int main(int argc, char **argv) {
 
         switch (c) {
             case 'i':
+                check_int(optarg);
                 strcpy(interface, optarg);
                 break;
             case 'p':
+                check_int(optarg);
                 strcpy(port, optarg);
                 break;
             case 't':
@@ -84,7 +87,7 @@ int main(int argc, char **argv) {
                 num = atoi(optarg);
                 break;
             default:
-                return(1);
+                print_err("unknown switch used");
         }
     }
 
@@ -387,6 +390,20 @@ int print_interfaces() {
     }
     
     return 0;
+}
+
+
+/**
+ * Function check if argument is of a type int
+ * Used to check arguments of switches -p and -n
+ */
+void check_int(char *arg) {
+    int arglen = strlen(arg);
+    for (int i = 0; i < arglen; i++) {
+        if (!isdigit(arg[i])) {
+            print_err("argument is not integer");
+        }
+    }
 }
 
 
