@@ -3,6 +3,6 @@
 ### Martin Fekete | martinfekete1@gmail.com
 
 ## 4. semester
-# IPK
+### IPK
   - Projekt 1
   - Projekt 2
