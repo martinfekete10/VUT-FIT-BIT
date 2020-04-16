@@ -67,7 +67,6 @@ void print_ascii(const u_char *, int, int);
 int print_data(const u_char *, int, int);
 int print_interfaces();
 
-
 /** 
  * Parses arguments and sets the interface for sniffing
  */
@@ -135,7 +134,8 @@ int main(int argc, char **argv) {
         return print_interfaces();
     }
 
-    // Define filter
+    // -------------------- Define filter --------------------
+    
     char filter[32] = "";
 
     if (tcp && !udp) {
