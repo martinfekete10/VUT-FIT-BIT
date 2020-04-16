@@ -24,6 +24,34 @@
 #include <net/ethernet.h>
 
 
+// Ethernet header len is constant
+#define SIZE_ETHERNET 14
+
+/**
+ * These defines ensure that sniffer is fully functional on wide range unix systems
+ * Linux systems have different tcphdr and udphdr member names than other unix systems (i.e. MacOS)
+ */
+#ifndef __linux
+
+    #define tcph_s tcph->th_sport
+    #define tcph_d tcph->th_dport
+    #define tcph_off tcph->th_off
+
+    #define udph_s udph->uh_sport
+    #define udph_d udph->uh_dport
+
+#else
+
+    #define tcph_s tcph->source
+    #define tcph_s tcph->dest
+    #define tcph_off tcph->doff
+
+    #define udph_s udph->source
+    #define udph_d udph->dest
+
+#endif
+
+
 /**
  * Function prototypes
  */
@@ -43,6 +71,7 @@ int print_interfaces();
  * Parses arguments and sets the interface for sniffing
  */
 int main(int argc, char **argv) {
+
 
     // ------------------- Argument parse -------------------
 
@@ -119,8 +148,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("%s\n", filter);
-
     // ------------------- Prepare interfaces -------------------
 
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -170,9 +197,9 @@ int main(int argc, char **argv) {
  */
 void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_char *packet) {
     int size = header->len;
-    struct iphdr *iphdr = (struct iphdr*)(packet + sizeof(struct ethhdr));
+    struct ip *iphdr = (struct ip *)(packet + SIZE_ETHERNET);
     
-    switch(iphdr->protocol) {
+    switch(iphdr->ip_p) {
         case IPPROTO_TCP:
             print_tcp_packet(packet, size);
             break;
@@ -181,7 +208,7 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
             break;
         default:
             // This should never be printed
-            printf("Err: %hhu should not be printed\n", iphdr->protocol);
+            printf("Err: %hhu should not be printed\n", iphdr->ip_p);
             break;
     } 
 }
@@ -193,8 +220,8 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
  */
 void print_first_line(const u_char *packet, int size, bool packet_t) {
 
-    struct iphdr *iph = (struct iphdr *)(packet  + sizeof(struct ethhdr));
-    int iphdrlen = iph->ihl * 4;
+    struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
+    int iphdrlen = iph->ip_hl * 4;
 
     // Get FQDN of source and destination adresses
     struct sockaddr_in source, dest;
@@ -205,14 +232,14 @@ void print_first_line(const u_char *packet, int size, bool packet_t) {
     memset(&dest, 0, sizeof(dest));
 
     source.sin_family = AF_INET;
-    source.sin_addr.s_addr = iph->saddr;
+    source.sin_addr.s_addr = iph->ip_src.s_addr;
     len_s = sizeof(struct sockaddr_in);
 
     dest.sin_family = AF_INET;
-    dest.sin_addr.s_addr = iph->daddr;
+    dest.sin_addr.s_addr = iph->ip_dst.s_addr;
     len_d = sizeof(struct sockaddr_in);
 
-    // Only FQDN should be printed, thus flag NI_NOFQDN
+    // Only FQDN should be printed, thus the flag NI_NOFQDN
     // If FQDN is not found, IP adress is printed
     getnameinfo((struct sockaddr *) &source, len_s, hbuf_s, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
     getnameinfo((struct sockaddr *) &dest, len_d, hbuf_d, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
@@ -223,15 +250,15 @@ void print_first_line(const u_char *packet, int size, bool packet_t) {
     // TCP packet
     if (packet_t) {
         // Needed to get to the source and destination port
-        struct tcphdr *tcph = (struct tcphdr*)(packet + iphdrlen + sizeof(struct ethhdr));
-        s_port = ntohs(tcph->source);
-        d_port = ntohs(tcph->dest);
+        struct tcphdr *tcph = (struct tcphdr*)(packet + iphdrlen + SIZE_ETHERNET);
+        s_port = ntohs(tcph_s);
+        d_port = ntohs(tcph_d);
     // UDP packet
     } else {
         // Needed to get to the source and destination port
-        struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + sizeof(struct ethhdr));
-        s_port = ntohs(udph->source);
-        d_port = ntohs(udph->dest);
+        struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + SIZE_ETHERNET);
+        s_port = ntohs(udph_s);
+        d_port = ntohs(udph_d);
     }
 
     // ------------- Print first line -------------
@@ -254,11 +281,11 @@ void print_tcp_packet(const u_char *packet, int size) {
     print_first_line(packet, size, true);
 
     // -------------- Print data ------------------	
-    struct iphdr *iph = (struct iphdr *)(packet + sizeof(struct ethhdr));
-    int iphdrlen = iph->ihl * 4;
+    struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
+    int iphdrlen = iph->ip_hl * 4;
 
-    struct tcphdr *tcph=(struct tcphdr*)(packet + sizeof(struct ethhdr) + iphdrlen);
-    int header_size =  sizeof(struct ethhdr) + iphdrlen + tcph->doff * 4;
+    struct tcphdr *tcph=(struct tcphdr*)(packet + SIZE_ETHERNET + iphdrlen);
+    int header_size =  SIZE_ETHERNET + iphdrlen + tcph_off * 4;
 
     int cnt = print_data(packet, header_size, 0);
     print_data(packet + header_size, size - header_size, cnt);
@@ -275,11 +302,11 @@ void print_udp_packet(const u_char *packet, int size) {
     print_first_line(packet, size, false);
 
     // -------------- Print data ------------------	
-    struct iphdr *iph = (struct iphdr *)(packet + sizeof(struct ethhdr));
-    int iphdrlen = iph->ihl * 4;
+    struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
+    int iphdrlen = iph->ip_hl * 4;
 
-    struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + sizeof(struct ethhdr));
-    int header_size =  sizeof(struct ethhdr) + iphdrlen + sizeof(udph);
+    struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + SIZE_ETHERNET);
+    int header_size =  SIZE_ETHERNET + iphdrlen + sizeof(udph);
 
     int cnt = print_data(packet, header_size, 0);
     print_data(packet + header_size, size - header_size, cnt);
@@ -299,7 +326,11 @@ void print_time() {
     struct timeval ms;
     gettimeofday(&ms, NULL);
     
-    printf("%02d:%02d:%02d.%04ld ", tm.tm_hour, tm.tm_min, tm.tm_sec, ms.tv_usec);
+    #if defined (__APPLE__)
+        printf("%02d:%02d:%02d.%04d ", tm.tm_hour, tm.tm_min, tm.tm_sec, ms.tv_usec);
+    #else
+        printf("%02d:%02d:%02d.%04ld ", tm.tm_hour, tm.tm_min, tm.tm_sec, ms.tv_usec);
+    #endif
 }
 
 
