@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <time.h>
 
 #include <netdb.h>
 #include <pcap/pcap.h>
@@ -26,6 +27,7 @@
 
 // Ethernet header len is constant
 #define SIZE_ETHERNET 14
+
 
 /**
  * These defines ensure that sniffer is fully functional on wide range unix systems
@@ -61,9 +63,8 @@ void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 void print_first_line(const u_char *, int, bool);
 void print_tcp_packet(const u_char *, int);
 void print_udp_packet(const u_char *, int);
-int print_data(const u_char *, int, int);
 void print_ascii(const u_char *, int, int);
-void print_time();
+int print_data(const u_char *, int, int);
 int print_interfaces();
 
 
@@ -71,7 +72,6 @@ int print_interfaces();
  * Parses arguments and sets the interface for sniffing
  */
 int main(int argc, char **argv) {
-
 
     // ------------------- Argument parse -------------------
 
@@ -122,7 +122,15 @@ int main(int argc, char **argv) {
 
     // Interface was not specified, write it to stdout
     if (interface[0] == '\0') {
-        printf("Usage: ./ipk-sniffer -i interface [-p ­­port] [--tcp|-t] [--udp|-u] [-n num]\n\n");
+        printf("X--------------------------------------------------------------------------------X\n");
+        printf("| Usage: ./ipk-sniffer -i interface [-p­­port] [--tcp|-t] [--udp|-u] [-n num]    |\n");
+        printf("|--------------------------------------------------------------------------------|\n");
+        printf("| [mandatory] -i interface : defines sniffed interface                           |\n");
+        printf("| [optional]  -p port      : defines sniffed port                                |\n");
+        printf("| [optional]  -t or --tcp  : only TCP packet are sniffed                         |\n");
+        printf("| [optional]  -u or --udp  : only UDP packet are sniffed                         |\n");
+        printf("| [optional]  -n num       : defines number of packets that will be sniffed      |\n");
+        printf("X--------------------------------------------------------------------------------X\n\n");
         printf("Available interfaces:\n");
         return print_interfaces();
     }
@@ -196,6 +204,12 @@ int main(int argc, char **argv) {
  * Decides packet protocol and calls function to parse and print the packet accordingly
  */
 void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_char *packet) {
+    
+    // Gather timestamp from header and print it formatted
+    struct tm *ts;
+    ts = localtime(&header->ts.tv_sec);
+    printf("%02d:%02d:%02d.%04d ", ts->tm_hour, ts->tm_min, ts->tm_sec, header->ts.tv_usec);
+    
     int size = header->len;
     struct ip *iphdr = (struct ip *)(packet + SIZE_ETHERNET);
     
@@ -262,7 +276,6 @@ void print_first_line(const u_char *packet, int size, bool packet_t) {
     }
 
     // ------------- Print first line -------------
-    print_time();
     printf("%s : ", hbuf_s);
     printf("%d > ", s_port);
     printf("%s : ", hbuf_d);
@@ -287,8 +300,9 @@ void print_tcp_packet(const u_char *packet, int size) {
     struct tcphdr *tcph=(struct tcphdr*)(packet + SIZE_ETHERNET + iphdrlen);
     int header_size =  SIZE_ETHERNET + iphdrlen + tcph_off * 4;
 
-    int cnt = print_data(packet, header_size, 0);
-    print_data(packet + header_size, size - header_size, cnt);
+    //int cnt = print_data(packet, header_size, 0);
+    //print_data(packet + header_size, size - header_size, cnt);
+    print_data(packet, size, 0);
 }
 
 
@@ -308,29 +322,9 @@ void print_udp_packet(const u_char *packet, int size) {
     struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + SIZE_ETHERNET);
     int header_size =  SIZE_ETHERNET + iphdrlen + sizeof(udph);
 
-    int cnt = print_data(packet, header_size, 0);
-    print_data(packet + header_size, size - header_size, cnt);
-}
-
-
-/** 
- * Function prints time in format: HH:MM:SS.MSMSMSMS
- * Called when printing the first line of packet
- */
-void print_time() {
-    // For HH:MM:SS
-    time_t t = time(NULL);
-    struct tm tm = *localtime(&t);
-
-    // For .MSMSMSMS
-    struct timeval ms;
-    gettimeofday(&ms, NULL);
-    
-    #if defined (__APPLE__)
-        printf("%02d:%02d:%02d.%04d ", tm.tm_hour, tm.tm_min, tm.tm_sec, ms.tv_usec);
-    #else
-        printf("%02d:%02d:%02d.%04ld ", tm.tm_hour, tm.tm_min, tm.tm_sec, ms.tv_usec);
-    #endif
+    //int cnt = print_data(packet, header_size, 0);
+    //print_data(packet + header_size, size - header_size, cnt);
+    print_data(packet, size, 0);
 }
 
 
@@ -352,7 +346,8 @@ int print_data(const u_char* data , int size, int header_body) {
         
         // no_of_printed_bytes_hex
         if (i % 16 == 0) {
-            // Last line
+            printf("0x%04x:", i);
+            /* // Last line
             if (i + 16 > size) {
                 int leftover_bytes = size - i;
                 printf("0x%04x:", i + leftover_bytes + header_body);
@@ -363,7 +358,7 @@ int print_data(const u_char* data , int size, int header_body) {
                 } else {
                     printf("0x%04x:", i + header_body);
                 }
-            }
+            } */
         }
 
         // bytes_hex
