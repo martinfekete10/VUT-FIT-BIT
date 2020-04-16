@@ -1,0 +1,39 @@
+# **Sniffer sieťových paketov**
+## **VUT FIT IPK projekt 2**
+### Autor: Martin Fekete | <xfeket00@fit.vutbr.cz>
+
+<br>
+
+## **O programe**
+`ipk-sniffer` je jednoduchá command-line aplikácia, ktorá slúži na odchytávanie a výpis paketov. Aplikácia je multiplatformná medzi OS založenými na unixe a bola testovaná na MacOS 10.14 a Ubuntu 18. Pomocou aplikácie je možné odchytávať na stanovenom rozhraní TCP a/alebo UDP pakety, ďalej je možné definovať port, na ktorom budú pakety odchytávané a je tiež možné bližšie určiť požadovaný počet očakávaných paketov (táto hodnota je implicitne nastavená na 1).
+
+Program ipk-sniffer je možné preložiť a spustiť pomocou príkazového riadku na ľubovoľnom unixovom systéme. Sémantika preloženia a spustenia aplikácie je popísaná nižšie.
+
+## **Preloženie**
+1. Pomocou príkazového riadku je nutné otvoriť priečinok, v ktorom je uložený zdrojový súbor `ipk-sniffer.c` a príslušný `Makefile`.
+2. Spustenie príkazu `make` vytvorí spustieľný súbor `ipk-sniffer`.
+
+## **Spustenie**
+
+Program sa spúšťa z príkazového riadku pomocou nasledujúceho príkazu:
+
+```bash
+./ipk-sniffer -i rozhranie [-p ­­port] [--tcp|-t] [--udp|-u] [-n num]
+```
+
+kde:
+    
+- `-i rozhranie` je rozhranie, na kotrom budú pakety odchytávané (napr. eth0).
+- `-p port` je obmedzenie na port, na ktorom budú pakety odchytávané. Pri neuvedení tohto argumentu sú brané do úvahy všetky porty.
+- `--tcp` alebo `-t` je obmedzenie iba na pakety typu TCP.
+- `--udp` alebo `-u` je obmedzenie iba na pakety typu UDP.
+- Pr neuvedení ani `--tcp|-t` ani `--udp|-u` alebo pri uvedení oboch argumentov sú brané do úvahy typu TCP aj UDP.
+- `-n num` definuje počet paketov, ktorý bude odchytávaný.
+
+Argument `-i rozhranie` je povinný, ostatné argumenty sú nepovinné a pri ich neuvedení je do úvahy braná implicitná hodnota. V prípade neuvedenia argumentu `-i rozhranie` je vypísaná stručná nápoveda, ako program spustiť spolu s výpisom šetkých dostupných rozhraní.
+
+**Príklad spustenia:**
+
+`./ipk-sniffer -i eth0 -p ­80 --tcp -n 20`
+
+V tomto prípade bude teda odchytávaných prvých 20 TCP paketov na rozhradní eth0 (ak je na zariadení dostupné) a porte 80.
