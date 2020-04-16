@@ -70,7 +70,6 @@ int main(int argc, char **argv) {
 
         switch (c) {
             case 'i':
-                check_int(optarg);
                 strcpy(interface, optarg);
                 break;
             case 'p':
@@ -84,6 +83,7 @@ int main(int argc, char **argv) {
                 udp = true;
                 break;
             case 'n':
+                check_int(optarg);
                 num = atoi(optarg);
                 break;
             default:
@@ -155,11 +155,17 @@ int main(int argc, char **argv) {
 
     pcap_loop(handle, num, process_packet, NULL);
 
+    // ------------------------ Cleanup -------------------------
+
+    pcap_freecode(&fp);
+    pcap_close(handle);
+
     return(0);
 }
 
 
 /**
+ * Callback function
  * Decides packet protocol and calls function to parse and print the packet accordingly
  */
 void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_char *packet) {
@@ -266,7 +272,7 @@ void print_tcp_packet(const u_char *packet, int size) {
 void print_udp_packet(const u_char *packet, int size) {
 
     // ------------ Print first line --------------
-    print_first_line(packet, size, true);
+    print_first_line(packet, size, false);
 
     // -------------- Print data ------------------	
     struct iphdr *iph = (struct iphdr *)(packet + sizeof(struct ethhdr));
@@ -310,7 +316,7 @@ int print_data(const u_char* data , int size, int header_body) {
         cnt++;
         // bytes_ASCII
         if (i % 16 == 0 && i != 0) {
-            print_ascii(data, i, 16);
+            print_ascii(data, i - 1, 15);
         }
         
         // no_of_printed_bytes_hex
@@ -318,10 +324,14 @@ int print_data(const u_char* data , int size, int header_body) {
             // Last line
             if (i + 16 > size) {
                 int leftover_bytes = size - i;
-                printf("0x%04x:", i + leftover_bytes);
+                printf("0x%04x:", i + leftover_bytes + header_body);
             // New line except last
-            } else {        
-                printf("0x%04x:", i + header_body);
+            } else {
+                if (header_body) {
+                    printf("0x%04x:", i + 16 + header_body);
+                } else {
+                    printf("0x%04x:", i + header_body);
+                }
             }
         }
 
