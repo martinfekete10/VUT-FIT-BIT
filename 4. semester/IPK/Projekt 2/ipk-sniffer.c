@@ -43,7 +43,7 @@
 #else
 
     #define tcph_s tcph->source
-    #define tcph_s tcph->dest
+    #define tcph_d tcph->dest
     #define tcph_off tcph->doff
 
     #define udph_s udph->source
