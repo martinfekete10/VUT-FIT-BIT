@@ -1,5 +1,5 @@
 /**
- * IPK project 2 - packet sniffer
+ * IPK projekt 2 - [ZETA] Packet sniffer
  * @author: Martin Fekete <xfeket00@fit.vutbr.cz>
  * @date:   15.4.2020
  */
@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #include <net/ethernet.h>
@@ -27,6 +28,7 @@
 
 // Ethernet header len is constant
 #define SIZE_ETHERNET 14
+#define SIZE_IPV6 40
 
 
 /**
@@ -53,6 +55,12 @@
 
 #endif
 
+#ifdef _IP_VHL
+    #define ipversion iphdr->ip_vhl >> 4
+#else
+    #define ipversion iphdr->ip_v
+#endif
+
 
 /**
  * Function prototypes
@@ -60,7 +68,8 @@
 void print_err(char *);
 void check_int(char *);
 void process_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
-void print_first_line(const u_char *, int, bool);
+void print_first_line_ipv4(const u_char *, bool);
+void print_first_line_ipv6(const u_char *, bool);
 void print_tcp_packet(const u_char *, int);
 void print_udp_packet(const u_char *, int);
 void print_ascii(const u_char *, int, int);
@@ -121,7 +130,7 @@ int main(int argc, char **argv) {
 
     // Interface was not specified, write it to stdout
     if (interface[0] == '\0') {
-        printf("X--------------------------------------------------------------------------------X\n");
+        printf("*--------------------------------------------------------------------------------*\n");
         printf("| Usage: ./ipk-sniffer -i interface [-p­­port] [--tcp|-t] [--udp|-u] [-n num]    |\n");
         printf("|--------------------------------------------------------------------------------|\n");
         printf("| [mandatory] -i interface : defines sniffed interface                           |\n");
@@ -129,7 +138,7 @@ int main(int argc, char **argv) {
         printf("| [optional]  -t or --tcp  : only TCP packet are sniffed                         |\n");
         printf("| [optional]  -u or --udp  : only UDP packet are sniffed                         |\n");
         printf("| [optional]  -n num       : defines number of packets that will be sniffed      |\n");
-        printf("X--------------------------------------------------------------------------------X\n\n");
+        printf("*--------------------------------------------------------------------------------*\n\n");
         printf("Available interfaces:\n");
         return print_interfaces();
     }
@@ -141,7 +150,7 @@ int main(int argc, char **argv) {
     if (tcp && !udp) {
         strcpy(filter, "tcp");
     } else if (udp && !tcp) {
-        strcpy(filter, "udp");
+        strcpy(filter, "udp and ip6");
     } else {
         strcpy(filter, "tcp or udp");
     }
@@ -156,19 +165,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    // ------------------- Prepare interfaces -------------------
+    // ---------------------- Open device -----------------------
 
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_if_t *interfaces;
-    
-    if (pcap_findalldevs(&interfaces, errbuf) == -1) {
-        print_err(errbuf);
-    }
-
-    // ---------------------- Open device -----------------------
     
     pcap_t *handle;
-    handle = pcap_open_live(interface, BUFSIZ , 1, 1000, errbuf);
+    handle = pcap_open_live(interface, BUFSIZ , 1, 100, errbuf);
 
     if (!handle) {
         print_err(errbuf);
@@ -205,26 +207,118 @@ int main(int argc, char **argv) {
  */
 void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_char *packet) {
     
-    // Gather timestamp from header and print it formatted
+    // Get timestamp from header and print it formatted
     struct tm *ts;
     ts = localtime(&header->ts.tv_sec);
-    printf("%02d:%02d:%02d.%04d ", ts->tm_hour, ts->tm_min, ts->tm_sec, header->ts.tv_usec);
+    printf("%02d:%02d:%02d.%04ld ", ts->tm_hour, ts->tm_min, ts->tm_sec, header->ts.tv_usec);
     
     int size = header->len;
+    
+    // Get IP version
     struct ip *iphdr = (struct ip *)(packet + SIZE_ETHERNET);
     
-    switch(iphdr->ip_p) {
-        case IPPROTO_TCP:
-            print_tcp_packet(packet, size);
-            break;
-        case IPPROTO_UDP:
-            print_udp_packet(packet, size);
-            break;
-        default:
-            // This should never be printed
-            printf("Err: %hhu should not be printed\n", iphdr->ip_p);
-            break;
-    } 
+    // IPv4
+    if (ipversion == 4) {
+        switch(iphdr->ip_p) {
+            case IPPROTO_TCP:
+                print_tcp_packet(packet, size);
+                break;
+            case IPPROTO_UDP:
+                print_udp_packet(packet, size);
+                break;
+            default:
+                break;
+        }
+    
+    // IPv6
+    } else {
+        struct ip6_hdr *ip6hdr = (struct ip6_hdr *)(iphdr);
+        int protocol = ip6hdr->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+        
+        switch(protocol) {
+            case IPPROTO_TCP:
+                print_first_line_ipv6(packet, true);
+                print_data(packet, size, 0);
+                break;
+            case IPPROTO_UDP:
+                print_first_line_ipv6(packet, false);
+                print_data(packet, size, 0);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+
+
+/**
+ * Prints first line of each packet in format:
+ * time IP|FQDN : port > IP|FQDN : port
+ */
+void print_first_line_ipv6(const u_char *packet, bool packet_t) {
+
+    struct ip6_hdr *iph = (struct ip6_hdr *)(packet + SIZE_ETHERNET);
+
+    // ---------------- Get FQDNs ----------------
+    
+    struct sockaddr_in6 source, dest;
+    socklen_t len_s, len_d;
+    char hbuf_s[NI_MAXHOST], hbuf_d[NI_MAXHOST];
+    
+    memset(&source, 0, sizeof(source));
+    memset(&dest, 0, sizeof(dest));
+
+    source.sin6_family = AF_INET6;
+    source.sin6_addr = iph->ip6_src;
+    len_s = sizeof(struct sockaddr_in6);
+
+    dest.sin6_family = AF_INET6;
+    dest.sin6_addr = iph->ip6_dst;
+    len_d = sizeof(struct sockaddr_in6);
+
+    // Only FQDN should be printed, thus the flag NI_NOFQDN
+    // If FQDN is not found, IP adress is printed
+    getnameinfo((struct sockaddr *) &source, len_s, hbuf_s, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
+    getnameinfo((struct sockaddr *) &dest, len_d, hbuf_d, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
+
+    /* // Get source port
+    char char_src[10];
+    // Src port is at postion 54th and 55th byte in IPv6 packet
+    sprintf(char_src, "%02x%02x", (unsigned int)packet[54], (unsigned int)packet[55]);
+    int s_port = (int)strtol(char_src, NULL, 16);
+
+    // Get destination port
+    char char_dst[10];
+    // Dst port is at postion 54th and 55th byte in IPv6 packet
+    sprintf(char_dst, "%02x%02x", (unsigned int)packet[56], (unsigned int)packet[57]);
+    int d_port = (int)strtol(char_dst, NULL, 16); */
+
+    // --------------- Get port ---------------
+
+    int s_port, d_port;
+
+    // TCP packet
+    if (packet_t) {
+        // Needed to get to the source and destination port
+        struct tcphdr *tcph = (struct tcphdr*)(packet + SIZE_IPV6 + SIZE_ETHERNET);
+        s_port = ntohs(tcph_s);
+        d_port = ntohs(tcph_d);
+    // UDP packet
+    } else {
+        // Needed to get to the source and destination port
+        struct udphdr *udph = (struct udphdr*)(packet + SIZE_IPV6  + SIZE_ETHERNET);
+        s_port = ntohs(udph_s);
+        d_port = ntohs(udph_d);
+    }
+
+
+    // ------------- Print first line -------------
+    printf("%s : ", hbuf_s);
+    printf("%d > ", s_port);
+    printf("%s : ", hbuf_d);
+    printf("%d\n", d_port);
+    printf("\n");
 }
 
 
@@ -232,12 +326,13 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
  * Prints first line of each packet in format:
  * time IP|FQDN : port > IP|FQDN : port
  */
-void print_first_line(const u_char *packet, int size, bool packet_t) {
+void print_first_line_ipv4(const u_char *packet, bool packet_t) {
 
     struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
     int iphdrlen = iph->ip_hl * 4;
 
-    // Get FQDN of source and destination adresses
+    // ---------------- Get FQDNs ----------------
+
     struct sockaddr_in source, dest;
     socklen_t len_s, len_d;
     char hbuf_s[NI_MAXHOST], hbuf_d[NI_MAXHOST];
@@ -258,6 +353,7 @@ void print_first_line(const u_char *packet, int size, bool packet_t) {
     getnameinfo((struct sockaddr *) &source, len_s, hbuf_s, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
     getnameinfo((struct sockaddr *) &dest, len_d, hbuf_d, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
 
+    // --------------- Get port ---------------
 
     int s_port, d_port;
 
@@ -291,7 +387,7 @@ void print_first_line(const u_char *packet, int size, bool packet_t) {
 void print_tcp_packet(const u_char *packet, int size) {
 
     // ------------ Print first line --------------
-    print_first_line(packet, size, true);
+    print_first_line_ipv4(packet, true);
 
     // -------------- Print data ------------------	
     struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
@@ -313,7 +409,7 @@ void print_tcp_packet(const u_char *packet, int size) {
 void print_udp_packet(const u_char *packet, int size) {
 
     // ------------ Print first line --------------
-    print_first_line(packet, size, false);
+    print_first_line_ipv4(packet, false);
 
     // -------------- Print data ------------------	
     struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
