@@ -26,7 +26,8 @@
 #include <net/ethernet.h>
 
 
-// Ethernet header len is constant
+// Constant header lengths
+#define SIZE_SLL 16
 #define SIZE_ETHERNET 14
 #define SIZE_IPV6 40
 
@@ -73,8 +74,12 @@ void print_first_line_ipv6(const u_char *, bool);
 void print_tcp_packet(const u_char *, int);
 void print_udp_packet(const u_char *, int);
 void print_ascii(const u_char *, int, int);
-int print_data(const u_char *, int, int);
+void print_data(const u_char *, int, int);
 int print_interfaces();
+
+// To differentiate between linux cooked-headers and ethernet
+int data_link_offset;
+
 
 /** 
  * Parses arguments and sets the interface for sniffing
@@ -86,6 +91,7 @@ int main(int argc, char **argv) {
     // Arg variables
     char interface[128] = "";
     char port[16] = "";
+    bool help = false;
     bool tcp = false;
     bool udp = false;
     int num = 1;
@@ -94,6 +100,7 @@ int main(int argc, char **argv) {
     int c;
     while (1) {
         static struct option longopts[] = {
+            { "help",   no_argument,           NULL,          'h' },
             { "tcp",   no_argument,            NULL,          't' },
             { "udp",   no_argument,            NULL,          'u' },
             { NULL,    0,                      NULL,           0 }
@@ -101,7 +108,7 @@ int main(int argc, char **argv) {
         
         int option_index = 0;
 
-        c = getopt_long (argc, argv, "i:p:tun:", longopts, &option_index);
+        c = getopt_long (argc, argv, "i:p:tun:h", longopts, &option_index);
         
         if (c == -1) break;
 
@@ -123,13 +130,17 @@ int main(int argc, char **argv) {
                 check_int(optarg);
                 num = atoi(optarg);
                 break;
+            case 'h':
+                help = true;
+                break;
             default:
-                print_err("unknown switch used");
+                print_err("Unknown switch used");
         }
     }
 
-    // Interface was not specified, write it to stdout
-    if (interface[0] == '\0') {
+    // Interface was not specified or --help | -h switch was used
+    // Print help message to stdout with all available interfaces
+    if (interface[0] == '\0' || help) {
         printf("*--------------------------------------------------------------------------------*\n");
         printf("| Usage: ./ipk-sniffer -i interface [-p­­port] [--tcp|-t] [--udp|-u] [-n num]    |\n");
         printf("|--------------------------------------------------------------------------------|\n");
@@ -150,9 +161,9 @@ int main(int argc, char **argv) {
     if (tcp && !udp) {
         strcpy(filter, "tcp");
     } else if (udp && !tcp) {
-        strcpy(filter, "udp and ip6");
+        strcpy(filter, "udp");
     } else {
-        strcpy(filter, "tcp or udp");
+        strcpy(filter, "(tcp or udp)");
     }
 
     if (port[0] != '\0') {
@@ -188,6 +199,16 @@ int main(int argc, char **argv) {
         print_err("Could not install filter");
     }
 
+    // ----------------- Check data link type ------------------
+
+    int data_link = pcap_datalink(handle);
+
+    if (data_link == DLT_EN10MB) {
+        data_link_offset = SIZE_ETHERNET;
+    } else if (data_link == DLT_LINUX_SLL) {
+        data_link_offset = SIZE_SLL;
+    }
+
     // ------------------------- Sniff --------------------------
 
     pcap_loop(handle, num, process_packet, NULL);
@@ -203,19 +224,18 @@ int main(int argc, char **argv) {
 
 /**
  * Callback function
- * Decides packet protocol and calls function to parse and print the packet accordingly
+ * Decides packet IP version, protocol and calls function to parse and print the packet accordingly
  */
 void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_char *packet) {
     
     // Get timestamp from header and print it formatted
-    struct tm *ts;
-    ts = localtime(&header->ts.tv_sec);
+    struct tm *ts = localtime(( const time_t *) &header->ts.tv_sec );
     printf("%02d:%02d:%02d.%04ld ", ts->tm_hour, ts->tm_min, ts->tm_sec, header->ts.tv_usec);
     
     int size = header->len;
-    
+
     // Get IP version
-    struct ip *iphdr = (struct ip *)(packet + SIZE_ETHERNET);
+    struct ip *iphdr = (struct ip *)(packet + data_link_offset);
     
     // IPv4
     if (ipversion == 4) {
@@ -234,15 +254,22 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
     } else {
         struct ip6_hdr *ip6hdr = (struct ip6_hdr *)(iphdr);
         int protocol = ip6hdr->ip6_ctlun.ip6_un1.ip6_un1_nxt;
+        int header_size = data_link_offset + SIZE_IPV6;
         
         switch(protocol) {
             case IPPROTO_TCP:
-                print_first_line_ipv6(packet, true);
-                print_data(packet, size, 0);
+                // True as the parameter means that protocol is TCP
+                print_first_line_ipv6(packet + data_link_offset, true);
+                // Print contents of the packet
+                print_data(packet, header_size, 0);
+                print_data(packet + header_size, size - header_size, header_size);
                 break;
             case IPPROTO_UDP:
-                print_first_line_ipv6(packet, false);
-                print_data(packet, size, 0);
+                // False as the parameter means that protocol is UDP
+                print_first_line_ipv6(packet + data_link_offset, false);
+                // Print contents of the packet
+                print_data(packet, header_size, 0);
+                print_data(packet + header_size, size - header_size, header_size);
                 break;
             default:
                 break;
@@ -258,9 +285,9 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
  */
 void print_first_line_ipv6(const u_char *packet, bool packet_t) {
 
-    struct ip6_hdr *iph = (struct ip6_hdr *)(packet + SIZE_ETHERNET);
+    struct ip6_hdr *iph = (struct ip6_hdr *)(packet);
 
-    // ---------------- Get FQDNs ----------------
+    // ---------------- Get IPs ----------------
     
     struct sockaddr_in6 source, dest;
     socklen_t len_s, len_d;
@@ -271,28 +298,13 @@ void print_first_line_ipv6(const u_char *packet, bool packet_t) {
 
     source.sin6_family = AF_INET6;
     source.sin6_addr = iph->ip6_src;
-    len_s = sizeof(struct sockaddr_in6);
 
     dest.sin6_family = AF_INET6;
     dest.sin6_addr = iph->ip6_dst;
-    len_d = sizeof(struct sockaddr_in6);
 
-    // Only FQDN should be printed, thus the flag NI_NOFQDN
-    // If FQDN is not found, IP adress is printed
-    getnameinfo((struct sockaddr *) &source, len_s, hbuf_s, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
-    getnameinfo((struct sockaddr *) &dest, len_d, hbuf_d, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
-
-    /* // Get source port
-    char char_src[10];
-    // Src port is at postion 54th and 55th byte in IPv6 packet
-    sprintf(char_src, "%02x%02x", (unsigned int)packet[54], (unsigned int)packet[55]);
-    int s_port = (int)strtol(char_src, NULL, 16);
-
-    // Get destination port
-    char char_dst[10];
-    // Dst port is at postion 54th and 55th byte in IPv6 packet
-    sprintf(char_dst, "%02x%02x", (unsigned int)packet[56], (unsigned int)packet[57]);
-    int d_port = (int)strtol(char_dst, NULL, 16); */
+    char src_addr[INET6_ADDRSTRLEN];
+    char dst_addr[INET6_ADDRSTRLEN];
+    
 
     // --------------- Get port ---------------
 
@@ -301,22 +313,22 @@ void print_first_line_ipv6(const u_char *packet, bool packet_t) {
     // TCP packet
     if (packet_t) {
         // Needed to get to the source and destination port
-        struct tcphdr *tcph = (struct tcphdr*)(packet + SIZE_IPV6 + SIZE_ETHERNET);
+        struct tcphdr *tcph = (struct tcphdr*)(packet + SIZE_IPV6);
         s_port = ntohs(tcph_s);
         d_port = ntohs(tcph_d);
     // UDP packet
     } else {
         // Needed to get to the source and destination port
-        struct udphdr *udph = (struct udphdr*)(packet + SIZE_IPV6  + SIZE_ETHERNET);
+        struct udphdr *udph = (struct udphdr*)(packet + SIZE_IPV6);
         s_port = ntohs(udph_s);
         d_port = ntohs(udph_d);
     }
 
 
     // ------------- Print first line -------------
-    printf("%s : ", hbuf_s);
+    printf("%s : ", inet_ntop(AF_INET6, &(source.sin6_addr), src_addr, sizeof(src_addr)));
     printf("%d > ", s_port);
-    printf("%s : ", hbuf_d);
+    printf("%s : ", inet_ntop(AF_INET6, &(dest.sin6_addr), dst_addr, sizeof(dst_addr)));
     printf("%d\n", d_port);
     printf("\n");
 }
@@ -328,11 +340,11 @@ void print_first_line_ipv6(const u_char *packet, bool packet_t) {
  */
 void print_first_line_ipv4(const u_char *packet, bool packet_t) {
 
-    struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
+    struct ip *iph = (struct ip *)(packet + data_link_offset);
     int iphdrlen = iph->ip_hl * 4;
 
-    // ---------------- Get FQDNs ----------------
-
+    // ---------------- Get IPs ----------------
+    
     struct sockaddr_in source, dest;
     socklen_t len_s, len_d;
     char hbuf_s[NI_MAXHOST], hbuf_d[NI_MAXHOST];
@@ -342,16 +354,9 @@ void print_first_line_ipv4(const u_char *packet, bool packet_t) {
 
     source.sin_family = AF_INET;
     source.sin_addr.s_addr = iph->ip_src.s_addr;
-    len_s = sizeof(struct sockaddr_in);
 
     dest.sin_family = AF_INET;
     dest.sin_addr.s_addr = iph->ip_dst.s_addr;
-    len_d = sizeof(struct sockaddr_in);
-
-    // Only FQDN should be printed, thus the flag NI_NOFQDN
-    // If FQDN is not found, IP adress is printed
-    getnameinfo((struct sockaddr *) &source, len_s, hbuf_s, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
-    getnameinfo((struct sockaddr *) &dest, len_d, hbuf_d, sizeof(hbuf_s), NULL, 0, NI_NOFQDN);
 
     // --------------- Get port ---------------
 
@@ -360,21 +365,21 @@ void print_first_line_ipv4(const u_char *packet, bool packet_t) {
     // TCP packet
     if (packet_t) {
         // Needed to get to the source and destination port
-        struct tcphdr *tcph = (struct tcphdr*)(packet + iphdrlen + SIZE_ETHERNET);
+        struct tcphdr *tcph = (struct tcphdr*)(packet + iphdrlen + data_link_offset);
         s_port = ntohs(tcph_s);
         d_port = ntohs(tcph_d);
     // UDP packet
     } else {
         // Needed to get to the source and destination port
-        struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + SIZE_ETHERNET);
+        struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + data_link_offset);
         s_port = ntohs(udph_s);
         d_port = ntohs(udph_d);
     }
 
     // ------------- Print first line -------------
-    printf("%s : ", hbuf_s);
+    printf("%s : ", inet_ntoa(source.sin_addr));
     printf("%d > ", s_port);
-    printf("%s : ", hbuf_d);
+    printf("%s : ", inet_ntoa(dest.sin_addr));
     printf("%d\n", d_port);
     printf("\n");
 }
@@ -390,15 +395,16 @@ void print_tcp_packet(const u_char *packet, int size) {
     print_first_line_ipv4(packet, true);
 
     // -------------- Print data ------------------	
-    struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
+    struct ip *iph = (struct ip *)(packet + data_link_offset);
     int iphdrlen = iph->ip_hl * 4;
 
-    struct tcphdr *tcph=(struct tcphdr*)(packet + SIZE_ETHERNET + iphdrlen);
-    int header_size =  SIZE_ETHERNET + iphdrlen + tcph_off * 4;
+    struct tcphdr *tcph=(struct tcphdr*)(packet + data_link_offset + iphdrlen);
+    int header_size =  data_link_offset + iphdrlen + tcph_off * 4;
 
-    //int cnt = print_data(packet, header_size, 0);
-    //print_data(packet + header_size, size - header_size, cnt);
-    print_data(packet, size, 0);
+    // Print headers and payload of packet
+    print_data(packet, header_size, 0);
+    print_data(packet + header_size, size - header_size, header_size);
+    printf("\n");
 }
 
 
@@ -412,15 +418,16 @@ void print_udp_packet(const u_char *packet, int size) {
     print_first_line_ipv4(packet, false);
 
     // -------------- Print data ------------------	
-    struct ip *iph = (struct ip *)(packet + SIZE_ETHERNET);
+    struct ip *iph = (struct ip *)(packet + data_link_offset);
     int iphdrlen = iph->ip_hl * 4;
 
-    struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + SIZE_ETHERNET);
-    int header_size =  SIZE_ETHERNET + iphdrlen + sizeof(udph);
+    struct udphdr *udph = (struct udphdr*)(packet + iphdrlen  + data_link_offset);
+    int header_size =  data_link_offset + iphdrlen + sizeof(struct udphdr);
 
-    //int cnt = print_data(packet, header_size, 0);
-    //print_data(packet + header_size, size - header_size, cnt);
-    print_data(packet, size, 0);
+    // Print headers and payload of packet
+    print_data(packet, header_size, 0);
+    print_data(packet + header_size, size - header_size, header_size);
+    printf("\n");
 }
 
 
@@ -429,12 +436,11 @@ void print_udp_packet(const u_char *packet, int size) {
  * no_of_printed_bytes_hex: bytes_hex bytes_ASCII
  * Header of packet and body is separated by newline char
  */
-int print_data(const u_char* data , int size, int header_body) {
+void print_data(const u_char* data , int size, int header_body) {
 
-    int cnt = 0;
+    int adder = header_body % 16;
 
     for (int i = 0; i < size ; i++) {
-        cnt++;
         // bytes_ASCII
         if (i % 16 == 0 && i != 0) {
             print_ascii(data, i - 1, 15);
@@ -442,19 +448,7 @@ int print_data(const u_char* data , int size, int header_body) {
         
         // no_of_printed_bytes_hex
         if (i % 16 == 0) {
-            printf("0x%04x:", i);
-            /* // Last line
-            if (i + 16 > size) {
-                int leftover_bytes = size - i;
-                printf("0x%04x:", i + leftover_bytes + header_body);
-            // New line except last
-            } else {
-                if (header_body) {
-                    printf("0x%04x:", i + 16 + header_body);
-                } else {
-                    printf("0x%04x:", i + header_body);
-                }
-            } */
+            printf("0x%04x:", i + header_body);
         }
 
         // bytes_hex
@@ -470,11 +464,11 @@ int print_data(const u_char* data , int size, int header_body) {
 
             // Print remainding data
             print_ascii(data, i, i % 16);
+            
+            // Newline after ASCII print
+            printf("\n");
         }
     }
-    
-    printf("\n");
-    return cnt;
 }
 
 
@@ -490,7 +484,7 @@ void print_ascii(const u_char *data, int i, int line_len) {
     
     for (int j = i - line_len; j <= i; j++) {
         // Char is printable - print ASCII representation
-        if (data[j] >= 32 && data[j] <= 126) {
+        if (isprint(data[j])) {
             printf("%c", data[j]);
         // Char is not printable - replace with "."
         } else {
@@ -498,7 +492,7 @@ void print_ascii(const u_char *data, int i, int line_len) {
         }
     }
     
-    // Printing at newline
+    // Newline after ASCII print
     printf("\n");
 }
 
