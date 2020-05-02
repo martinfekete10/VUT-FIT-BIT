@@ -235,8 +235,9 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
     int size = header->len;
 
     // Get IP version
+    // ipversion is macro that expands to iphdr->ip_vhl >> 4 or iphdr->ip_v based on the OS
     struct ip *iphdr = (struct ip *)(packet + data_link_offset);
-    
+
     // IPv4
     if (ipversion == 4) {
         switch(iphdr->ip_p) {
@@ -258,16 +259,19 @@ void process_packet(u_char *nothing, const struct pcap_pkthdr *header, const u_c
         
         switch(protocol) {
             case IPPROTO_TCP:
-                // True as the parameter means that protocol is TCP
+                // Last parameter is true as the parameter means that protocol is TCP
                 print_first_line_ipv6(packet + data_link_offset, true);
                 // Print contents of the packet
+                struct tcphdr *tcph=(struct tcphdr*)(packet + data_link_offset + SIZE_IPV6);
+                header_size += tcph_off * 4;
                 print_data(packet, header_size, 0);
                 print_data(packet + header_size, size - header_size, header_size);
                 break;
             case IPPROTO_UDP:
-                // False as the parameter means that protocol is UDP
-                print_first_line_ipv6(packet + data_link_offset, false);
+                // Last parameter is false as the parameter means that protocol is UDP
+                print_first_line_ipv6(packet + data_link_offset, false); 
                 // Print contents of the packet
+                header_size += sizeof(struct udphdr);
                 print_data(packet, header_size, 0);
                 print_data(packet + header_size, size - header_size, header_size);
                 break;
@@ -435,6 +439,7 @@ void print_udp_packet(const u_char *packet, int size) {
  * Function prints whole packet in format:
  * no_of_printed_bytes_hex: bytes_hex bytes_ASCII
  * Header of packet and body is separated by newline char
+ * Inspired by: https://www.tcpdump.org/pcap.html
  */
 void print_data(const u_char* data , int size, int header_body) {
 
