@@ -1,0 +1,127 @@
+<!-- 
+    Autor: Martin Fekete <xfeket00@fit.vutbr.cz>
+    Accessible at: http://martinfekete.aspfree.cz/
+-->
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>http://martinfekete.aspfree.cz/</title>
+        <link rel="stylesheet" type="text/css" href="style.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Space+Mono">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Work+Sans">
+        <script src="https://kit.fontawesome.com/1de6446984.js" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        <!-- Navigation -->
+        <div class="navbar">
+            <div class="main-menu" id="menu">
+                <a id="1" class="btn active" href="#home">Home</a>
+                <a id="2" class="btn" href="#about">About Me</a>
+                <a id="3" class="btn" href="#tech">Technologies</a>
+                <a id="4" class="btn" href="#projects">Portfolio</a>
+                <a id="5" class="btn" href="#contact">Contact</a>
+                <a href="javascript:void(0);" class="icon" onclick="responsiveMenu()">
+                    <i class="fa fa-bars"></i>
+                </a>
+            </div>
+        </div>
+
+        <!-- Introduction -->
+        <div class="home" id="home">
+            <img class="right" src="img/photo.png" alt="Avatar">
+            <div class="introduction-contatiner">
+                <div class="mynameis">Hi, my name is</div>
+                <div class="martinfekete">Martin Fekete</div>
+                <div class="letmeintroduce">let me introduce myself<div id="border"></div></div>
+            </div>
+        </div>
+
+        <!-- About Me -->
+        <div class="white-bg" id="about">
+            <div class="section">About Me</div>
+            <div class="local-navigation">
+                <div><a href="#education">Education</a> | <a href="#work-experience">Work Experience</a> | <a href="#interests">Interests</a></div>
+            </div>
+            <div id="education" class="subsection"><i class="fas fa-user-graduate"></i> Education</div>
+                <div class="subheading">Brno University of Technology</div>
+                <div class="subheading-desc">2018 - now</div>
+                <div class="paragraph">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</div>
+            <div id="work-experience" class="subsection"><i class="fas fa-briefcase"></i> Work Experience</div>
+                <div class="subheading">Ponsh</div>
+                <div class="subheading-desc">2016 - now</div>
+                <div class="paragraph">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</div>
+                <p></p>
+                <div class="subheading">NRSYS</div>
+                <div class="subheading-desc">2018 - 2019</div>
+                <div class="paragraph">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</div>
+                <div id="interests" class="subsection"><i class="fas fa-volleyball-ball"></i> Interests</div>
+            <div class="paragraph">Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</div>
+        </div>
+
+        <!-- Technologies and clients -->
+        <div class="blue-bg" id="tech">
+            <div class="clear">
+                <div class="section">Technologies & Clients</div>
+                <div class="icons">
+                    <a><i class="fab fa-html5"></i></a>
+                    <a><i class="fab fa-css3-alt"></i></a>
+                    <a><i class="fab fa-python"></i></a>
+                </div>
+                <div class="icons">
+                    <a><i class="fab fa-js-square"></i></a>
+                    <a><i class="fab fa-bootstrap"></i></a>
+                    <a><i class="fab fa-angular"></i></a>
+                </div>
+            </div>
+            <div class="clear">
+                <hr>
+                <div class="icons">
+                    <img alt="clients-ponsh" title="This is not made up" class="client-img" src="img/clients/ponsh.png"/>
+                    <img alt="clients-stories" title="This is made up" class="client-img" src="img/clients/stories.png"/>
+                    <img alt="clients-kofola" title="This is made up" class="client-img" src="img/clients/kofola.png"/>
+                </div>
+                <div class="icons">
+                    <img alt="clients-chillix" title="This is made up" class="client-img" src="img/clients/chillix.png"/>
+                    <img alt="clients-mars" title="This is made up" class="client-img" src="img/clients/mars.png"/>
+                    <img alt="clients-noc" title="This is made up" class="client-img" src="img/clients/NoC.png"/>
+                </div>
+            </div>
+        </div>
+
+        <!-- Portfolio -->
+        <div class="white-bg" id="projects">
+            <div class="section">Portfolio</div>
+            <div class="icons">
+                <a title="This is not made up" href="https://www.ponsh.sk" target="_blank"><img alt="ponsh1" class="sample-img" src="img/portfolio/ponsh.jpg"/></a>
+                <a title="This is not made up" href="https://www.ponsh.sk/ponozky-na-mieru/" target="_blank"><img alt="ponsh2" class="sample-img" src="img/portfolio/ponsh-na-mieru.jpg"/></a>
+                <a title="This is made up"><img alt="kofola" class="sample-img" src="img/portfolio/kofola.jpg"/></a>
+                <a title="This is made up"><img alt="stories" class="sample-img" src="img/portfolio/stories.jpg"/></a>
+                <a title="This is made up"><img alt="noc" class="sample-img" src="img/portfolio/NoC.jpg"/></a>
+                <a title="This is made up"><img alt="fontech" class="sample-img" src="img/portfolio/fontech.jpg"/></a>
+            </div>
+        </div>
+
+        <!-- Contact Me -->
+        <div class="blue-bg" id="contact">
+            <div class="section">Get in Touch!</div>
+            <div class="paragraph"></div>
+            <div class="icons">
+                <a href="https://github.com/martinfekete10" target="_blank"><i class="fab fa-github"></i></a>
+                <a href="https://www.facebook.com" target="_blank"><i class="fab fa-facebook"></i></a>
+                <a href="https://www.instagram.com/martin_fekete/" target="_blank"><i class="fab fa-instagram"></i></a>
+                <a href="mailto:xfeket00@fit.vutbr.cz?Subject=Hello" target="_blank"><i class="fas fa-at"></i></a>
+            </div>
+            <div class="footer-center">
+                <hr>
+                <div class="copyright">Martin Fekete 2020</div>    
+            </div>
+        </div>
+
+        <!-- Script import -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+        <script src="script.js"></script>
+    
+    </body>
+</html>

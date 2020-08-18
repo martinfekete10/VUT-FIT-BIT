@@ -48,8 +48,10 @@
 
 ## **4. semester**
 ### **IPK**
-- Projekt 1: 19/20
-- Projekt 2: 18.5/20
+- Projekt 1
+    - 19/20
+- Projekt 2
+    - 18.5/20
 
 ### **IPP**
 - Časť 1 - parse.php + dokumentácia

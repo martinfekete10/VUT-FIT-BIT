@@ -1,0 +1,326 @@
+#!/bin/sh
+
+POSIXLY_CORRECT=yes
+
+#### VARIABLE DECLARATION ####
+list_ip=0
+list_hosts=0
+list_uri=0
+hist_ip=0
+hist_load=0
+
+after=false
+before=false
+ip=false
+uri=false
+
+dateAfter=0
+dateBefore=9999999999999999
+
+########################################
+########################################
+
+######### PROCESS ARGUMENTS ############
+
+for i in "$@"
+do
+    case "$i" in
+    -a) 
+        after=true
+        
+        # check if time given is in correct format
+        if ! echo "$2" | grep -Eq '[0-2][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]'; then
+            >&2 echo "error: wrong time format"
+            exit 1
+        fi
+
+        dateAfter=$(echo "$2" | sed 's/[^0-9]*//g')
+        shift
+        shift ;;
+    -b) 
+        before=true
+        
+        # check if time given is in correct format
+        if ! echo "$2" | grep -Eq '[0-2][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]'; then
+            >&2 echo "error: wrong time format"
+            exit 1
+        fi
+
+        dateBefore=$(echo "$2" | sed 's/[^0-9]*//g')
+        shift
+        shift ;;
+    -ip)
+        ip=true
+        ipAddr="$2"
+
+        ipv6regex='^([0-9A-Fa-f]{0,4}:){2,7}([0-9A-Fa-f]{1,4}$|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4})$'
+        ipv4regex='^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+
+        # check if ip given is in correct format
+        count=0
+        if echo "$ipAddr" | grep -Eq "$ipv4regex"; then
+            count=$((count+1))
+        elif echo "$ipAddr" | grep -Eq "$ipv6regex"; then
+            count=$((count+1))
+        fi
+
+        if [ $count -ne 1 ]; then
+            >&2 echo "error: wrong ip adress"
+            exit 1
+        fi
+        shift
+        shift ;;
+    -uri)
+        uri=true
+        uriAddr="$2"
+        shift
+        shift ;;
+    list-ip)
+        list_ip=1
+        shift ;;
+    list-uri)
+        list_uri=1
+        shift ;;
+    list-hosts)
+        list_hosts=1
+        shift ;;
+    hist-ip)
+        hist_ip=1
+        shift ;;
+    hist-load)
+        hist_load=1
+        shift ;;
+    esac
+done
+
+# check if no more than one command is given
+noCommands=$((list_ip+list_hosts+hist_ip+hist_load+list_uri))
+if [ $noCommands -gt 1 ]; then
+    >&2 echo "error: number of commands should be <= 1"
+	exit 1
+fi
+
+########################################
+########################################
+
+###### FILTERS #########################
+
+###### -a and -b ######
+date_edit () 
+{
+    awk '{print substr($4,2)}' | sed "s/./ /12" | awk '{
+        if(substr($1,4,3) == "Jan")
+            {gsub("Jan", "01", $1); print}
+        else if(substr($1,4,3) == "Feb")
+            {gsub("Feb", "02", $1); print}
+        else if(substr($1,4,3) == "Mar")
+            {gsub("Mar", "03", $1); print}
+        else if(substr($1,4,3) == "Apr")
+            {gsub("Apr", "04", $1); print}
+        else if(substr($1,4,3) == "May")
+            {gsub("May", "05", $1); print}
+        else if(substr($1,4,3) == "Jun")
+            {gsub("Jun", "06", $1); print}
+        else if(substr($1,4,3) == "Jul")
+            {gsub("Jul", "07", $1); print}
+        else if(substr($1,4,3) == "Aug")
+            {gsub("Aug", "08", $1); print}
+        else if(substr($1,4,3) == "Sep")
+            {gsub("Sep", "09", $1); print}
+        else if(substr($1,4,3) == "Oct")
+            {gsub("Oct", "10", $1); print}
+        else if(substr($1,4,3) == "Nov")
+            {gsub("Nov", "11", $1); print}
+        else if(substr($1,4,3) == "Dec")
+            {gsub("Dec", "12", $1); print}
+        }' | sed -e 's/\(..\)\/\(..\)\/\(....\)/\3\2\1/' -e 's/://g' -e 's/[^0-9]*//g'
+}
+
+date_filter () 
+{
+    while read -r line; do
+        dateFile="$( printf "%s\n" "$line" | date_edit)"
+        if [ "$dateFile" -gt "$dateAfter" ] && [ "$dateFile" -lt "$dateBefore" ]; then
+            printf "%s\n" "$line"
+        fi
+    done
+}
+
+###### -ip filter ######
+ip_filter ()
+{
+    awk -v ip="$ipAddr" '$1 == ip { print $0 }'
+}
+
+###### uri-filter ######
+uri_filter ()
+{
+    grep -E "$uriAddr"
+}
+
+########################################
+########################################
+
+###### COMMANDS ########################
+
+###### list-ip ######
+list_ip_fc ()
+{
+    awk '{ print $1 }' | sort | uniq
+}
+
+##### list-hosts #####
+list_hosts_fc ()
+{
+    ip=$(awk '{print $1}' | sort -u | uniq )
+    echo "$ip" | while read -r line; do
+        ipTemp="$line"
+        line=$( host "$line" )
+
+        if [ $? -ne 0 ]; then
+            printf "%s\n" "$ipTemp"
+        else
+            printf "%s\n" "$line" | awk '{if($5 != "for") {print $5}}'
+        fi
+    done | sort -u
+}
+
+####### list-uri ######
+list_uri_fc ()
+{
+    awk '{if (substr($6,2)=="POST" || substr($6,2)=="GET" || substr($6,2)=="HEAD") print $7 }' | sort | uniq
+}
+
+####### hist-ip #######
+hist_ip_fc ()
+{
+    awk '{print $1}' | sort -n | uniq -c | sort -n -r | awk '{no=$1; $1=sprintf("%-*s", $1, ""); gsub(" ", "#", $1); printf("%s (%d): %s\n", $2, no, $1)}'
+}
+
+###### hist-load ######
+date_replace_hist_load ()
+{
+    awk '{
+        if(substr($1,6,3) == "Jan")
+            {gsub("Jan", "01", $1); print}
+        else if(substr($1,6,3) == "Feb")
+            {gsub("Feb", "02", $1); print}
+        else if(substr($1,6,3) == "Mar")
+            {gsub("Mar", "03", $1); print}
+        else if(substr($1,6,3) == "Apr")
+            {gsub("Apr", "04", $1); print}
+        else if(substr($1,6,3) == "May")
+            {gsub("May", "05", $1); print}
+        else if(substr($1,6,3) == "Jun")
+            {gsub("Jun", "06", $1); print}
+        else if(substr($1,6,3) == "Jul")
+            {gsub("Jul", "07", $1); print}
+        else if(substr($1,6,3) == "Aug")
+            {gsub("Aug", "08", $1); print}
+        else if(substr($1,6,3) == "Sep")
+            {gsub("Sep", "09", $1); print}
+        else if(substr($1,6,3) == "Oct")
+            {gsub("Oct", "10", $1); print}
+        else if(substr($1,6,3) == "Nov")
+            {gsub("Nov", "11", $1); print}
+        else if(substr($1,6,3) == "Dec")
+            {gsub("Dec", "12", $1); print}
+        }'
+}
+
+hist_load_fc ()
+{
+    awk '{print substr($4,2,17)}' | sed "s/./ /12" | sed 's#/#\ #g' | awk '{ 
+    t=$1; $1=$3; $3=t; print;}' | sed 's#:#\ #g' | awk '{$5="00"; print;}' | sed 's# #\-#g' | sed "s/./ /12" | awk '{
+    gsub(/\-/,":",$2); print}'| date_replace_hist_load | sort -n | uniq -c | awk '{
+    no=$1; $1=sprintf("%-*s", $1, ""); gsub(" ", "#", $1); printf("%s %s (%d): %s\n", $2, $3, no, $1)}'
+}
+
+########################################
+########################################
+
+# NO LOGS ARE GIVEN => READ FROM STDIN #
+if [ $# -eq 0 ] ; then
+    logs=$(cat)
+fi
+
+###### SAVE LOGS TO VARIABLE ###########
+count=0
+for i in "$@"
+do
+    # counter
+    count=$((count+1))
+    # check if file in arguemnt exists
+    if [ ! -f "$i" ]; then
+        >&2 echo "error: file does not exist"
+        exit 1
+    fi
+    # .gz file
+    if file --mime-type "$i" | grep -q gzip$; then
+        if [ "$count" -eq 1 ]; then
+            logs=$(gunzip -c "$i")
+            continue
+        fi
+        logs="$logs$(echo "" && gunzip -c "$i")"
+        continue
+    fi
+    # non .gz file
+    if [ "$count" -eq 1 ]; then
+        logs="$(cat "$i")"
+        continue
+    fi
+    logs="$logs$(echo "" && cat "$i")"
+done
+
+########################################
+########################################
+
+###### APPLY FILTERS ###################
+
+if [ $after = true ] || [ $before = true ]; then
+    logs=$(printf "%s\n" "$logs" | date_filter)
+fi
+
+if [ "$ip" = true ]; then
+    logs=$(printf "%s\n" "$logs" | ip_filter)
+fi
+
+if [ "$uri" = true ]; then
+    logs=$(printf "%s\n" "$logs" | uri_filter)
+fi
+
+########################################
+########################################
+
+###### APPLY COMMANDS ##################
+
+if [ $list_ip -eq 1 ]; then
+    printf "%s\n" "$logs" | list_ip_fc
+    exit 0
+fi
+
+if [ $list_hosts -eq 1 ]; then
+    printf "%s\n" "$logs" | list_hosts_fc
+    exit 0
+fi
+
+if [ $list_uri -eq 1 ]; then
+    printf "%s\n" "$logs" | list_uri_fc
+    exit 0
+fi
+
+if [ $hist_ip -eq 1 ]; then
+    printf "%s\n" "$logs" | hist_ip_fc
+    exit 0
+fi
+
+if [ $hist_load -eq 1 ]; then
+    printf "%s\n" "$logs" | hist_load_fc
+    exit 0
+fi
+
+########################################
+########################################
+
+### print logs with applied filters ####
+printf "%s\n" "$logs"
