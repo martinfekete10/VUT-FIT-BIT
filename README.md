@@ -34,8 +34,10 @@
 
 ## **3. semester**
 ### **IAL**
-- 1. domáca úloha
-- 2. domáca úloha
+- Domáca úloha 1
+    - 10/10
+- Domáca úloha 2
+    - 10/10
 
 ### **INP**
 - Projekt 1
@@ -50,9 +52,9 @@
 - Projekt 2: 18.5/20
 
 ### **IPP**
-- 1. časť - parse.php + dokumentácia
+- Časť 1 - parse.php + dokumentácia
     - 7/7
-- 2. časť - interpret.py + test.php + dokumentácia
+- Časť 2 - interpret.py + test.php + dokumentácia
     - 12.1/13
 - Bonusové body
     - 5/5
