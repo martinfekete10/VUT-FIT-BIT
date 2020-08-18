@@ -97,6 +97,8 @@ int main(int argc, char **argv) {
     int num = 1;
 
     // Parse arguments
+    // Inspired by:
+    // https://www.gnu.org/software/libc/manual/html_node/Getopt-Long-Option-Example.html#Getopt-Long-Option-Example
     int c;
     while (1) {
         static struct option longopts[] = {
@@ -439,7 +441,8 @@ void print_udp_packet(const u_char *packet, int size) {
  * Function prints whole packet in format:
  * no_of_printed_bytes_hex: bytes_hex bytes_ASCII
  * Header of packet and body is separated by newline char
- * Inspired by: https://www.tcpdump.org/pcap.html
+ * Inspired by: 
+ * https://www.tcpdump.org/pcap.html
  */
 void print_data(const u_char* data , int size, int header_body) {
 
