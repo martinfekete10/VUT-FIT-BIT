@@ -1,0 +1,126 @@
+\documentclass[12pt,a4paper,titlepage,final]{article}
+
+\usepackage[slovak]{babel}
+\usepackage[utf8]{inputenc}
+
+\usepackage[bookmarksopen,colorlinks,plainpages=false,urlcolor=blue,unicode]{hyperref}
+\usepackage{url}
+\usepackage{amsmath}
+\usepackage{capt-of}
+\usepackage[Q=yes]{examplep}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage[text={15.2cm, 25cm}, ignorefoot]{geometry}
+\usepackage{ragged2e}
+\justifying
+
+
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Titulná strana
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{title.tex}
+
+\pagestyle{plain}
+\pagenumbering{roman}
+\setcounter{page}{1}
+\tableofcontents
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Obsah
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+\pagestyle{plain}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Zadanie}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Zadaním projektu bolo vytvoriť aplikáciu demonštrujúci možnosti modulu Watchdog Timer (WDOG) dostupného na mikrokontroléri Kinetis K60 z dosky platformy FITkit 3.
+
+Projekt sa drží nasledovných predpokladov:
+\begin{itemize}
+    \item Předpokladá sa zdroj hodín LPO (Low-Power Oscillator)
+    \item V rámci aplikácie je demonštrovaná obsluha WDOG v periodickom a okienkovom (windowed) režime, každá s rôznymi veľkosťami periódy/okna.
+    \item Aplikácia musí interagovať (napr. pomocou tlačítok, LED, piezzo bzučáku či terminálu) s užívateľom; prinajmenšom musí (rozlíšiteľným spôsobom) signalizovať pomocou LED a/alebo piezzo bzučáku: zahájenie vstavanej aplikácie po resete, zahájenie iterácie v cykle aplikácie, zahájenie obsluhy WDOG
+    \item Pomocou aplikácie musí byť možné demonštrovať dopad nevčasných obslúch WDOG na jej chod a vykonať zber štatistík o počtoch a príčinách mikrokontloréru
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Watchdog}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Watchdog je elektronický alebo softvérový časovač, ktorý je používaný na kontrolu a detekciu zacyklenia väčšinou vstavaných aplikácií. Pri bežnej prevádzke je watchdog pravidelne resetovaný bežiacou aplikáciou, čo zabraňuje vypršaniu jeho časového limitu. Ak nie je  bežiaca aplikácia kvôli nejakej chybe resetovať watchdog, časovač uplynie a systém je zavedený resetom do pôvodného stavu.
+
+\subsection{Registre modulu}
+Modul watchdog, ktorý je súčasťou Kinetis K60 obsahuje sériu nasledujúcich registrov. Všetky spomenuté registre majú šírku 16 bitov.
+\begin{itemize}
+    \item \verb|WDOG_STCTRLH| a \verb|WDOG_STCTRLL|: slúžia na konfiguráciu watchdogu. V prípade tohto programu sú používané na jeho zapnutie, zapnutie/vypnutie okienkového režimu a nastavenie LPO oscilátoru ako zdroju hodín.
+    \item \verb|WDOG_TOVALH| a \verb|WDOG_TOVALL|: slúžia na nastavenie veľkosti periódy časovača watchdogu.
+    \item \verb|WDOG_WINH| a \verb|WDOG_WINL|: hodnota v týchto registroch určuje veĺkosť okna.
+    \item \verb|WDOG_REFRESH|: zápisom 2 špecifických hodnôt do tohto registru sa watchdog obnoví, čo zamedzí jeho resetu.
+    \item \verb|WDOG_UNLOCK|: je používaný na odomknútie možnosti zmeny hodnôt registrov. Podobne ako pri \verb|WDOG_REFRESH| je nutné pre odomknutie tejto možnosti najprv zapísať do registru 2 špecifické hodnoty.
+    \item \verb|WDOG_TMROUTH| a \verb|WDOG_TMROUTL|: určujú dobu od posledného resetu watchdogu.
+    \item \verb|WDOG_RSTCNT|: určuje, koľkokrát bol mikrokontrolér resetovaný od doby, kedy bol zapnutý.
+    \item \verb|WDOG_PRESC|: hodnota, ktorou je delený vstup watchdog hodín (0 v prípade, ak zdroj nie je delený).
+\end{itemize}
+
+\subsection{Periodický režim}
+Periodický režim je využívaný, keď je požadovaná prostá kontrola správneho behu programu, napríklad na kontrolu nekonečného cyklu. Je teda dôležité nastaviť správnu veľkosť periódy (v registroch \verb|WDOG_TOVALH| a \verb|WDOG_TOVALL|), počas ktorej je nutné obnoviť watchdog. Ak po dobu periódy WDOG neobrdží refresh správu, celý systém je resetovaný.
+
+\subsection{Okienkový režim}
+Okienkový režim je používaný na kontrolu, či beží aplikácia správnou rýchlosťou. Podobne ako pri periodickom režme je aj tu nastavená perióda, avšak refresh správu očakáva WDOG iba v intervale od \verb|WDOG_WINH| a \verb|WDOG_WINL| po \verb|WDOG_TOVALH| a \verb|WDOG_TOVALL|. Ak príde refresh WDOGu pred alebo po tomto intervale, celý systém je resetovaný.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Implementácia}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Program je implementovaný v jazyku C a vývoj prebiehal v Kinetis Desgin Studio (KDS). Celá vlastná implementácia je v súbore \verb|main.c|. V implementácii boli použité časti zdrojového kódu z demo ukážky mikrokontroléru dostupné v súboroch predmetu; tieto časti sú v zdrojovom kóde vyznačené.
+
+\subsection{Komunikácia s používateľom}
+Program komunikuje s používateľom prostredníctvom výpisov do terminálu (napr. PuTTY), bzučiaku a LED.
+
+\subsection{Tok programu}
+V programe je najprv povolený zápis do WDOG registrov pomocou sekvencie čísel \verb|0xC520| a \verb|0xD928| zapísaných do registru \verb|WDOG_UNLOCK|. Následne je inicializovaný mikrokontrolér s požadovanými pinmi. Na začiatku behu mikrokontrolér je do terminálu vypísaný nápis signalizujúci štart behu aplikácie a mikrokontrolér zapípa. Ak je WDOG v periodickom režime, zapípa raz, ak je povolený okienkový režim, mikrokontrolér zapípa 2-krát. Oba režimy majú rovnaké, 2 rôzne dĺžky periódy. Prepnutie medzi režimami a dĺžkami ich periódy prebieha automaticky po resete systému modulom WDOG.
+
+\subsection{Refresh modulu}
+Watchdog nie je obnovovaný automaticky aplikáciou, ale je nutná interakcia s používateľom. WDOG je obnovený stačením tlačidla SW4 na mikrokontroléri a to tak, že stlačenie tlačidla spôsobí zápis hôdnôt \verb|0xA602| a \verb|0xB480| do registru \verb|WDOG_REFRESH|. Ak nie je WDOG obnovený včas, vyprší jeho časový limit, aplikácia je resetovaná a prechádza do ďalšieho módu/periódy, prípadne končí; v každom prípade je o stave aplikácie používateľ informovaný nápisom v termináli.
+
+\subsection{Výpis štatistík}
+Štatistiky sú vypisované do terminálu stlačením tlačidla SW6. Sú vypísané nasledujúce štatistiky:
+
+\begin{itemize}
+    \item Počet resetov mikrokontroléru spôsobeným modulom WDOG
+    \item Príčina posledného resetu mikrokontroléru
+    \item Časový limit, v ktorom je nutné modul obnoviť
+    \item V prípade okienkového režimu veľkosť okienka
+\end{itemize}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Použitie}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Aplikáciu je vhodné spustiť s terminálom (napr. PuTTY), ktorý bude slúžiť na výpis informácií o stave aplikácie. Aplikáciu stačí spustiť a automaticky je nastavený periodický režim s 2 rôznymi periódami. Po 2 resetoch mikrokontroléru modulom WDOG je aplikácia spustená s okienkovým režimom; takisto s 2 rôznymi periódami a dĺžkami okna (dĺžka okna musí byť vždy menšia ako dĺžka periódy). Aplikácia je schopná vypisovať štatistiky do terminálu stlačením tlačidla SW6. Obnovu WDOGu je nutné robiť manuálne tlačidlom SW4
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Zhrnutie}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Vzhľadom k obmedzeným môžnostiam kvôli súčasnej situácii nebola aplikácia fyzicky testovaná na zariadení FitKit 3. Aplikácia by mala užívateľsky prívetivo spĺňať požiadavok demonštrácie možností modulu watchdog na mikrokontroléri Kinetis K60, takisto by mala byť schopná vypisovať relevantné štatistiky do semihostingu a pomocou bzučiaku a LED informovať o aktuálnom stave.
+
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Bibliografia
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage
+
+\nocite{*}
+\bibliographystyle{plain}
+
+\bibliography{literatura.bib}
+
+
+\end{document}

@@ -54,6 +54,7 @@
     - 18.5/20
 
 ### **IPP**
+Analyzátor a interpret zdrojového kódu v jazyku  IPPcode20
 - Časť 1 - parse.php + dokumentácia
     - 7/7
 - Časť 2 - interpret.py + test.php + dokumentácia
@@ -71,3 +72,16 @@
 - Projekt 2
     - 27/30
 
+
+## **5. semester**
+### **ISA**
+- Projekt - DNS resolver
+    - 17/20
+
+### **IMS**
+- Projekt - Simulácia epidémie pomocou spojitého SIDARTHE modelu
+    - 20/20
+
+### **IMP**
+- Projekt - Demonštrácia možností modulu Watchdog Timer (WDOG) na mikrokontroléri Kinetis K60
+    - 11.8/12

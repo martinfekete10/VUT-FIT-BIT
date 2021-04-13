@@ -1,0 +1,40 @@
++ ++++++++++++++++++++++++++++++++++++++++++++++ +
+| Filtrujúci DNS resolver                        |
+| VUT FIT ISA projekt                            |
+| Autor: Martin Fekete | <xfeket00@fit.vutbr.cz> |
++ ++++++++++++++++++++++++++++++++++++++++++++++ +
+
+--------------------------------------------------
+1. O programe
+--------------------------------------------------
+Program filtrujúci DNS požiadavky z dodaného súboru. Ostatné požiadavky
+sú odoslané v nezmenenej podobe špecifikovanému serveru. DNS odpoveď je
+následne preposlaná pôvodnému odosielateľovi.
+
+--------------------------------------------------
+2. Preklad
+--------------------------------------------------
+1. Pomocou príkazového riadku je nutné otvoriť priečinok, v ktorom je uložený
+   zdrojový súbor dns.cpp a príslušný Makefile.
+2. Spustenie príkazu `make` vytvorí spustieľný súbor dns.
+
+--------------------------------------------------
+3. Spustenie
+--------------------------------------------------
+./dns -s server [-p port] -f filter_file
+
+kde:
+-s server: IP adresa alebo doménové meno DNS serveru (resolveru), kam sa má zaslat požiadavok.
+-p port: Číslo portu, na ktorom bude program očakávať požiadavky (implicitne port 53).
+-f filter_file: Meno souboru obsahujúce nežiadúce domény.
+
+--------------------------------------------------
+Príklad spustenia:
+--------------------------------------------------
+
+./dns -s 1.1.1.1 -f filter.txt
+
+V tomto prípade bude DNS resolver odchytávať požiadavky na porte 53 a validné
+požiadavky (t.j. nenachádzajúce sa v súbore filter.txt) budú preposielané
+na server 1.1.1.1. Po prijatí odpovedi prepošle program dns odpoveď pôvodnému
+odosielateľovi.
